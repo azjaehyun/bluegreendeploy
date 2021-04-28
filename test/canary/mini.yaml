@@ -1,0 +1,95 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: miniapp
+  labels:
+    app: mini
+spec:
+  selector:
+    matchLabels:
+      app: mini
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mini
+    spec:
+      containers:
+      - name: miniapp
+        image: jjhratm/miningx:white
+        resources:
+          requests:
+            cpu: 25m
+            memory: 50Mi
+          limits:
+            cpu: 150m
+            memory: 150Mi
+        ports:
+        - containerPort: 8080
+  strategy:
+    canary:
+      stableService: miniapp-stable
+      canaryService: miniapp-canary
+      trafficRouting:
+        nginx:
+          stableIngress: miniapp-ingress
+      steps:
+      - setCanaryScale:
+          weight: 15
+      - setCanaryScale:
+          matchTrafficWeight: true
+#      - setWeight: 10
+      # - pause:
+      #     duration: 1m
+      - setWeight: 30
+      - pause:
+          duration: 30s
+      - setWeight: 40
+      - pause:
+          duration: 30s
+      - setWeight: 50
+      - pause: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: miniapp-stable
+  labels:
+    app: mini
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: mini
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: miniapp-canary
+  labels:
+    app: mini
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: mini
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: miniapp-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    # nginx.ingress.kubernetes.io/affinity: cookie
+#    nginx.ingress.kubernetes.io/affinity-mode: persistent
+spec:
+  rules:
+  - host: mini.todok8s.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: miniapp-stable
+          servicePort: 80
